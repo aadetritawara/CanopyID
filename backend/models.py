@@ -19,6 +19,8 @@ class Job(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key = True, index = True)
     s3_file_key: Mapped[str] = mapped_column(String, unique = True, index = True, nullable = False)
     status: Mapped[Status] = mapped_column(SQLEnum(Status), nullable=False, default=Status.PENDING)
+    latitude: Mapped[float] = mapped_column(Float, nullable=True)
+    longitude = Mapped[float] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone = True), 
         nullable = False, 
