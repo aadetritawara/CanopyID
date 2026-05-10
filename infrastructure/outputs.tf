@@ -17,3 +17,8 @@ output "s3_bucket_region" {
   description = "The region the S3 bucket is deployed in, needed for Presigned URLs"
   value       = aws_s3_bucket.audio_bucket.region
 }
+
+output "ecr_repository_url" {
+  description = "The URL of the ECR repository for the Lambda function container image"
+  value       = aws_ecr_repository.birdnet_repo.repository_url
+}
