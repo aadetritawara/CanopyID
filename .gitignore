@@ -44,3 +44,5 @@ __pycache__
 
 # Ignore zip files
 *.zip
+
+.vscode/
