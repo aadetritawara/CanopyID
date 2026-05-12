@@ -22,3 +22,8 @@ output "ecr_repository_url" {
   description = "The URL of the ECR repository for the Lambda function container image"
   value       = aws_ecr_repository.birdnet_repo.repository_url
 }
+
+output "ec2_public_dns" {
+  description = "The public DNS of the EC2 instance"
+  value       = aws_instance.backend_ec2.public_dns
+}

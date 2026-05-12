@@ -99,14 +99,6 @@ resource "aws_security_group" "lambda_sg" {
   name        = "lambda-sg"
   description = "Security Group for CanopyID Lambda"
   vpc_id      = aws_vpc.main.id
-
-  # Allow Lambda to access S3
-  egress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
-    prefix_list_ids = [data.aws_prefix_list.s3.id]
-  }
 }
 
 # EC2 Security Group
@@ -114,31 +106,6 @@ resource "aws_security_group" "ec2_sg" {
   name        = "ec2-sg"
   description = "Security Group for FastAPI and Redis"
   vpc_id      = aws_vpc.main.id
-
-  # Allow inbound HTTP traffic from anywhere 
-  ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow outbound traffic to anywhere
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # Allow SSH ONLY from my specific IP 
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.my_ip]
-  }
-
 }
 
 # RDS Security Group
@@ -151,6 +118,46 @@ resource "aws_security_group" "rds_sg" {
 # ==========================================
 # Security Group Rules
 # ==========================================
+
+# Allow SSH to EC2 from my IP only for secure access
+resource "aws_security_group_rule" "allow_ssh_to_ec2" {
+  type              = "ingress"
+  from_port         = 22
+  to_port           = 22
+  protocol          = "tcp"
+  cidr_blocks       = [var.my_ip]
+  security_group_id = aws_security_group.ec2_sg.id
+}
+
+# Allow EC2 outbound HTTP traffic to anywhere (for API calls, updates, etc.)
+resource "aws_security_group_rule" "allow_ec2_outbound_http" {
+  type              = "egress"
+  from_port         = 0
+  to_port           = 0
+  protocol          = "-1"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.ec2_sg.id
+}
+
+# Allow EC2 inbound HTTP traffic from anywhere
+resource "aws_security_group_rule" "allow_ec2_inbound_http" {
+  type              = "ingress"
+  from_port         = 80
+  to_port           = 80
+  protocol          = "tcp"
+  cidr_blocks       = ["0.0.0.0/0"]
+  security_group_id = aws_security_group.ec2_sg.id
+}
+
+# Lambda outbound to S3
+resource "aws_security_group_rule" "lambda_outbound_s3" {
+  type              = "egress"
+  from_port         = 443
+  to_port           = 443
+  protocol          = "tcp"
+  prefix_list_ids   = [data.aws_prefix_list.s3.id]
+  security_group_id = aws_security_group.lambda_sg.id
+}
 
 # Lambda outbound to RDS
 resource "aws_security_group_rule" "lambda_to_rds" {
@@ -262,9 +269,18 @@ resource "aws_s3_bucket_cors_configuration" "audio_bucket_cors" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["PUT", "POST", "GET"]
-    allowed_origins = ["*"] # TODO: Restrict this to the domain when deployed
+    allowed_origins = [aws_instance.backend_ec2.public_dns]
     max_age_seconds = 3000
   }
+}
+
+# Block all public access to the S3 bucket for security
+resource "aws_s3_bucket_public_access_block" "audio_bucket_access" {
+  bucket                  = aws_s3_bucket.audio_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
 }
 
 # Give S3 permission to invoke Lambda function when a new audio file is uploaded
@@ -350,6 +366,7 @@ resource "aws_lambda_function" "audio_classifier" {
     variables = {
       DATABASE_URL = "postgresql://${var.db_username}:${var.db_password}@${aws_db_instance.bird_db.endpoint}/postgres"
       DB_PASSWORD  = var.db_password
+      REDIS_HOST   = aws_instance.backend_ec2.private_ip
     }
   }
 
