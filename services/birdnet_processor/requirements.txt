@@ -1,0 +1,6 @@
+birdnetlib
+ai-edge-litert
+librosa
+psycopg2-binary
+requests
+boto3

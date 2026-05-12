@@ -17,6 +17,9 @@ class JobResponse(BaseModel):
     id: int
     status: Status
     created_at: datetime
+
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
     
     result_profile: Optional[str] = None        # optional until langchain is done
     classifications: List[BirdResponse] = []    # empty until lambda done with bird classification
