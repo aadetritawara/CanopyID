@@ -4,11 +4,12 @@ from sqlalchemy import DateTime, Integer, String, Text, ForeignKey, Float, Enum 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from enum import Enum
 
-from database import Base
+from backend.db.database import Base
 
 class Status(Enum):
     PENDING = "pending"
     CLASSIFYING = "classifying"
+    CLASSIFIED = "classified"
     SUMMARIZING = "summarizing"
     COMPLETED = "completed"
     FAILED = "failed"
