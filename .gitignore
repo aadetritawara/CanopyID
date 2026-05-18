@@ -39,7 +39,8 @@ terraform.rc
 # Ignore virtual environment directories
 venv/
 __pycache__
-.env
+.env.prod
+.env.dev
 *.pyc
 
 # Ignore zip files
