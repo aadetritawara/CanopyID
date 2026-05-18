@@ -8,6 +8,16 @@ output "s3_bucket_arn" {
   value       = aws_s3_bucket.audio_bucket.arn
 }
 
+output "rds_endpoint" {
+  description = "The endpoint of the RDS instance for database connections"
+  value       = aws_db_instance.bird_db.endpoint
+}
+
+output "rds_name" {
+  description = "The name of the RDS database"
+  value       = aws_db_instance.bird_db.db_name
+}
+
 output "lambda_function_name" {
   description = "The name of the Lambda function for processing bird audio files"
   value       = aws_lambda_function.audio_classifier.function_name
