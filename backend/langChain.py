@@ -66,7 +66,7 @@ SUMMARY_PROMPT = ChatPromptTemplate.from_template("""
     """)
 
 
-async def langchain_classification_summary_agent(
+async def langchain_classification_summary(
     unique_birds: set,
     job_context_info: list[dict],
 ) -> dict[str, str]:
@@ -74,7 +74,7 @@ async def langchain_classification_summary_agent(
     Generate a summary profile of each classified bird using LangChain.
 
     The LLM uses Wikipedia to fetch information about each bird.
-    It then generates a structured summary for each bird, including habitat, traits, and migration status based on the user's location and date of recording.
+    It then generates a structured summary for each bird, including habitat, traits, and activity based on the user's location and date of recording.
     """
 
     llm = ChatGroq(
@@ -105,5 +105,8 @@ async def langchain_classification_summary_agent(
             )
             return bird, result
 
-    results = await asyncio.gather(*[summarise_one(b) for b in unique_birds])
-    return dict(results)
+    try:
+        results = await asyncio.gather(*[summarise_one(b) for b in unique_birds])
+        return dict(results)
+    except Exception as e:
+        return {"error": f"Error generating LangChain summary: {e}"}
