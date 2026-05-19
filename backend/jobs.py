@@ -1,3 +1,5 @@
+from unittest import result
+
 from sqlalchemy import select
 
 import boto3
@@ -19,9 +21,7 @@ router = APIRouter()
 r = redis.Redis(host="redis", port=6379, decode_responses=True)
 
 
-async def get_classified_birds(
-    job_id: int, db: AsyncSession
-) -> list[dict]:
+async def get_classified_birds(job_id: int, db: AsyncSession) -> list[dict]:
     """
     Helper function to query the Bird table for bird classifications related to a specific job_id.
     Called after the Lambda finishes classifying, to get the classifications to send to the frontend.
@@ -63,7 +63,7 @@ async def update_db_with_langchain_result(
     await db.commit()
 
 
-async def job_event_generator(job_id: int, request, db: AsyncSession = Depends(get_db)):
+async def job_event_generator(job_id: int, request, db: AsyncSession):
     """
     Generate server-sent events for a given job_id by subscribing to a Redis channel.
     Yields events one at a time and streams each yield to the client.
@@ -99,7 +99,16 @@ async def job_event_generator(job_id: int, request, db: AsyncSession = Depends(g
             payload = json.loads(message["data"])
             event_type = payload.get("status")
 
-            if event_type == "classified":
+            if event_type == "failed":
+                content = payload.get("message", "An error occurred during processing!")
+                yield {
+                    "event": "complete",
+                    "data": json.dumps({"status": "failed", "result_profile": content}),
+                }
+                break # close the generator since the job is done
+
+            elif event_type == "classified":
+
                 # lambda finished classifying, get classifications from bird db for this job_id
                 classifications = await get_classified_birds(job_id, db)
 
@@ -128,7 +137,9 @@ async def job_event_generator(job_id: int, request, db: AsyncSession = Depends(g
                 query = select(Job.latitude, Job.longitude, Job.created_at).where(
                     Job.id == job_id
                 )
-                job_context_info = await db.execute(query).mappings().all()
+
+                result = await db.execute(query)
+                job_context_info = result.mappings().all()
 
                 # call lang chain helper function with context info and unique birds to generate a summary profile of the birds in the recording
                 classification_summary = await langchain_classification_summary(
@@ -138,24 +149,32 @@ async def job_event_generator(job_id: int, request, db: AsyncSession = Depends(g
                 # check if the summarized dictionary contains the 'error' key
                 if "error" in classification_summary:
                     content = classification_summary["error"]
-                    await update_db_with_langchain_result(job_id, error=True, result_profile=content, db=db)
+                    await update_db_with_langchain_result(
+                        job_id, error=True, result_profile=content, db=db
+                    )
                 else:
                     content = ""
                     for bird, summary in classification_summary.items():
                         content += f"### {bird}\n{summary}\n\n"
-                    await update_db_with_langchain_result(job_id, error=False, result_profile=content, db=db)
+                    await update_db_with_langchain_result(
+                        job_id, error=False, result_profile=content, db=db
+                    )
 
                 # send the generated profile(s) back to the frontend as an sse update
                 yield {
-                        "event": "complete",
-                        "data": json.dumps(
-                            {
-                                "status": "complete" if "error" not in classification_summary else "failed",
-                                "result_profile": content
-                            }
-                        ),
-                    }
-                
+                    "event": "complete",
+                    "data": json.dumps(
+                        {
+                            "status": (
+                                "complete"
+                                if "error" not in classification_summary
+                                else "failed"
+                            ),
+                            "result_profile": content,
+                        }
+                    ),
+                }
+
                 # break the loop since the task is finished
                 break
     finally:
@@ -188,13 +207,13 @@ def get_presigned_url(job_id: int) -> str:
 
 
 @router.get("/{job_id}/stream", response_class=EventSourceResponse)
-async def stream_job(job_id: int, request: Request):
+async def stream_job(job_id: int, request: Request, db: AsyncSession = Depends(get_db)):
     """
     Endpoint for streaming server-sent events related to a specific job_id.
     The frontend will connect to this endpoint after creating a job and uploading the audio file,
     and will listen for updates on the job status, classifications, and final profile result.
     """
-    return EventSourceResponse(job_event_generator(job_id, request))
+    return EventSourceResponse(job_event_generator(job_id, request, db))
 
 
 @router.post("/", response_model=JobCreateResponse)
