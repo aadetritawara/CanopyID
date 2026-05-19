@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+
 class Settings(BaseSettings):
 
     # Database settings
@@ -11,12 +12,12 @@ class Settings(BaseSettings):
     # LangChain settings
     GROQ_API_KEY: str
     LANGSMITH_API_KEY: str
-    LANGSMITH_TRACING: bool
+    LANGSMITH_TRACING: str
+    WIKIPEDIA_USER_AGENT: str
 
     model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore"     
+        env_file="../.env.dev", env_file_encoding="utf-8", extra="ignore"
     )
+
 
 settings = Settings()
