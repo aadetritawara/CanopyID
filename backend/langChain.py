@@ -1,3 +1,4 @@
+import wikipedia
 from config import settings
 import asyncio
 
@@ -7,56 +8,61 @@ from langchain_core.output_parsers import StrOutputParser
 from langchain_community.retrievers import WikipediaRetriever
 from langchain.tools import tool
 
-def search_wikipedia(bird: str, max_chars: int = 2000) -> str:
+wikipedia.set_user_agent(settings.WIKIPEDIA_USER_AGENT)
+
+
+async def search_wikipedia(bird: str, max_chars: int = 2000) -> str:
     """Search Wikipedia for information about a single bird species.
 
     Args:
-        bird:      The bird's common name 
+        bird:      The bird's common name
         max_chars: How many characters of the article to return.
     """
     retriever = WikipediaRetriever(load_max_docs=1)
-    docs = retriever.invoke(bird)
+
+    try:
+        docs = await retriever.ainvoke(bird)
+    except Exception as e:
+        return f"Error fetching Wikipedia context for '{bird}': {e}"
 
     if not docs:
         return f"No Wikipedia article found for '{bird}'."
 
-    title   = docs[0].metadata.get("title")
+    title = docs[0].metadata.get("title")
     content = docs[0].page_content[:max_chars]
     return f"=== {title} ===\n{content}"
 
 
 SUMMARY_PROMPT = ChatPromptTemplate.from_template("""
-    You are an expert birding guide writing a summary about the {bird_name}. 
-    Use ONLY the Wikipedia excerpt below to write a concise summary (maximum 2 sentences per section) for each bird. 
-    Do not invent facts not present in the excerpt. 
+    You are an expert birding guide writing a polished, user-facing summary about the {bird_name}. 
+    Use ONLY the provided context to write a concise summary (maximum 2 sentences per section).
+    
+    CRITICAL RULES:
+    1. NO META-TALK: Never mention "Wikipedia", "the excerpt", the exact date, or the coordinates. 
+    Write as if you simply know these facts.
+    2. MISSING DATA: If the context lacks specific migration details for this region/season, 
+    just state its general migratory habits smoothly. Do not apologize or state that information is missing.
     
     ─────────────────────────────────
-    WIKIPEDIA CONTEXT
+    BACKGROUND CONTEXT
     ─────────────────────────────────
     {wikipedia_context}
     ─────────────────────────────────
     
-    OBSERVATION DETAILS
+    OBSERVATION DETAILS (Use silently to determine the season and location):
     - Latitude:  {latitude}
     - Longitude: {longitude}
     - Date:      {date_info}
     
-    First, identify:
-    1. The geographic region and country from the coordinates.
-    2. The current season for that hemisphere.
+    Write a structured summary with EXACTLY these sections:
     
-    Write a structured summary with these sections:
-    
-    ### [Bird Name]
+    ### {bird_name}
     
     **Habitat** — Typical environments and geographic range.
     
-    **Traits** — Visual appearance (size, plumage, markings) and behaviour (diet,
-    nesting, calls, social habits).
+    **Traits** — Visual appearance (size, plumage, markings) and behaviour (diet, nesting, calls).
     
-    **Migration — [Season]** — What is this bird doing right now in this region?
-    Is it a resident, seasonal visitor, active migrant, or preparing to depart?
-    Name specific wintering or breeding grounds if mentioned in the Wikipedia excerpt.
+    **Activity — [Insert Season Here]** — What is this bird doing right now in this season?
     """)
 
 
@@ -67,7 +73,7 @@ async def langchain_classification_summary_agent(
     """
     Generate a summary profile of each classified bird using LangChain.
 
-    The LLM uses Wikipedia to fetch information about each bird. 
+    The LLM uses Wikipedia to fetch information about each bird.
     It then generates a structured summary for each bird, including habitat, traits, and migration status based on the user's location and date of recording.
     """
 
@@ -80,34 +86,24 @@ async def langchain_classification_summary_agent(
     chain = SUMMARY_PROMPT | llm | StrOutputParser()
     ctx = job_context_info[0]
 
-
     # cap at 3 concurrent calls to stay within grok free tier
     semaphore = asyncio.Semaphore(3)
 
     # run all birds concurrently
     async def summarise_one(bird: str) -> tuple[str, str]:
         async with semaphore:
-            wiki_context = search_wikipedia(bird)  
-            result = await chain.ainvoke({
-                "wikipedia_context": wiki_context,
-                "bird_name":         bird,
-                "latitude":          ctx["latitude"],
-                "longitude":         ctx["longitude"],
-                "date_info":         ctx["created_at"],
-            })
+            wiki_context = await search_wikipedia(bird)
+
+            result = await chain.ainvoke(
+                {
+                    "wikipedia_context": wiki_context,
+                    "bird_name": bird,
+                    "latitude": ctx["latitude"],
+                    "longitude": ctx["longitude"],
+                    "date_info": ctx["created_at"],
+                }
+            )
             return bird, result
 
     results = await asyncio.gather(*[summarise_one(b) for b in unique_birds])
     return dict(results)
-
-if __name__ == "__main__":
-    test_birds = {"Song Sparrow", "House Sparrow"}
-    test_context = [{"latitude": 49.2827, "longitude": -123.1207, "created_at": "2026-05-18"}]
-
-    results = asyncio.run(langchain_classification_summary_agent(test_birds, test_context))
-
-    for bird, summary in results.items():
-        print(f"\n{'='*60}")
-        print(f"  {bird}")
-        print('='*60)
-        print(summary)
