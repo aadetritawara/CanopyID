@@ -222,6 +222,7 @@ resource "aws_db_subnet_group" "main" {
 # RDS PostgreSQL instance for storing bird classification results and job metadata
 resource "aws_db_instance" "bird_db" {
   identifier             = "canopy-db"
+  db_name                = "bird_db"
   instance_class         = "db.t3.micro"
   engine                 = "postgres"
   engine_version         = var.engine_version
