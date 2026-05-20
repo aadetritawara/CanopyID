@@ -6,7 +6,7 @@ import boto3
 from fastapi import status
 from botocore.exceptions import ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request
-from backend.schemas import JobCreateResponse, JobResponse, JobCreate
+from backend.pydantic_schemas import JobCreateResponse, JobResponse, JobCreate
 from backend.db.database import get_db
 from backend.db.models import Job, Bird, Status
 from backend.langChain import langchain_classification_summary
@@ -213,7 +213,10 @@ async def stream_job(job_id: int, request: Request, db: AsyncSession = Depends(g
     The frontend will connect to this endpoint after creating a job and uploading the audio file,
     and will listen for updates on the job status, classifications, and final profile result.
     """
-    return EventSourceResponse(job_event_generator(job_id, request, db))
+    return EventSourceResponse(
+        job_event_generator(job_id, request, db), 
+        ping=15 # ping every 15 seconds to prevent connection from being dropped due to being idle
+    )
 
 
 @router.post("/", response_model=JobCreateResponse)
