@@ -66,6 +66,15 @@ SUMMARY_PROMPT = ChatPromptTemplate.from_template("""
     """)
 
 
+llm = ChatGroq(
+    model="llama-3.1-8b-instant",
+    api_key=settings.GROQ_API_KEY,
+    temperature=0,
+)
+
+chain = SUMMARY_PROMPT | llm | StrOutputParser()
+
+
 async def langchain_classification_summary(
     unique_birds: set,
     job_context_info: list[dict],
@@ -77,13 +86,6 @@ async def langchain_classification_summary(
     It then generates a structured summary for each bird, including habitat, traits, and activity based on the user's location and date of recording.
     """
 
-    llm = ChatGroq(
-        model="llama-3.1-8b-instant",
-        api_key=settings.GROQ_API_KEY,
-        temperature=0,
-    )
-
-    chain = SUMMARY_PROMPT | llm | StrOutputParser()
     ctx = job_context_info[0]
 
     # cap at 3 concurrent calls to stay within grok free tier
