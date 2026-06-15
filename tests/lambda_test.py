@@ -46,6 +46,9 @@ def setup_infrastructure(global_config):
         
         # 2 bird audio file
         ("tests/test_assets/TwoBirds.mp3", "2.mp3", 2, 2), 
+
+        # silence audio file
+        ("tests/test_assets/Silence.mp3", "3.mp3", 3, 0),
     ]
 )
 
@@ -108,6 +111,10 @@ def test_lambda_audio_processing(
 
         cursor.execute("SELECT * FROM birds WHERE job_id = %s;", (job_id,))
         birds = cursor.fetchall()
-        assert len(birds) >= expected_min_birds, f"Expected at least {expected_min_birds} birds, found {len(birds)}"
+        
+        if expected_min_birds == 0: 
+            assert len(birds) == 0, f"Expected NO birds for {s3_file_key}, but found {len(birds)}"
+        else:
+            assert len(birds) >= expected_min_birds, f"Expected at least {expected_min_birds} birds, found {len(birds)}"
 
     verify_conn.close()
