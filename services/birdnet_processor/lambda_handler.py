@@ -62,7 +62,7 @@ def lambda_handler(event, context):
 
         current_job_id = int(
             key.split("/")[-1].split(".")[0]
-        )  # assumes S3 key format is always "s3://<bucket>/<job_id>.wav"
+        )  # assumes S3 key format is always "s3://<bucket>/<job_id>.mp3"
 
         # download audio file to temporary storage
         tmp_file_path = f"/tmp/{key.split('/')[-1]}"
@@ -78,7 +78,7 @@ def lambda_handler(event, context):
 
             update_status_query = """
                 UPDATE jobs 
-                SET status = 'classifying' 
+                SET status = 'CLASSIFYING' 
                 WHERE id = %s;
             """
 
@@ -97,17 +97,9 @@ def lambda_handler(event, context):
             if select_result is None:
                 raise Exception(f"Job ID {current_job_id} not found in database.")
 
-            # grab lat, lon, and date from database
-            user_lat = select_result["latitude"]
-            user_lon = select_result["longitude"]
-            submitted_date = select_result["created_at"]
-
             recording = Recording(
                 analyzer,
                 tmp_file_path,
-                lat=user_lat,
-                lon=user_lon,
-                date=submitted_date,
                 min_conf=0.25,
             )
             recording.analyze()
@@ -134,7 +126,7 @@ def lambda_handler(event, context):
             # after inserting all detections, update the Job status to 'CLASSIFIED'
             update_job_query = """
                             UPDATE jobs 
-                            SET status = 'classified' 
+                            SET status = 'CLASSIFIED' 
                             WHERE id = %s;
                         """
             cursor.execute(update_job_query, (current_job_id,))
@@ -180,7 +172,7 @@ def lambda_handler(event, context):
                 # update job status to 'failed' in case of any processing error
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        "UPDATE jobs SET status = 'failed' WHERE id = %s;",
+                        "UPDATE jobs SET status = 'FAILED' WHERE id = %s;",
                         (current_job_id,),
                     )
                 connection.commit()

@@ -103,9 +103,9 @@ async def job_event_generator(job_id: int, request, db: AsyncSession):
                 content = payload.get("message", "An error occurred during processing!")
                 yield {
                     "event": "complete",
-                    "data": json.dumps({"status": "failed", "result_profile": content}),
+                    "data": json.dumps({"status": "failed", "message": content}),
                 }
-                break # close the generator since the job is done
+                break  # close the generator since the job is done
 
             elif event_type == "classified":
 
@@ -214,8 +214,8 @@ async def stream_job(job_id: int, request: Request, db: AsyncSession = Depends(g
     and will listen for updates on the job status, classifications, and final profile result.
     """
     return EventSourceResponse(
-        job_event_generator(job_id, request, db), 
-        ping=15 # ping every 15 seconds to prevent connection from being dropped due to being idle
+        job_event_generator(job_id, request, db),
+        ping=15,  # ping every 15 seconds to prevent connection from being dropped due to being idle
     )
 
 
